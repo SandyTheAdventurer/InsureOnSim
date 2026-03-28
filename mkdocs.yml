@@ -1,0 +1,9 @@
+site_name: InsureOnSim Documentation
+nav:
+  - Home: index.md
+  - API: api.md
+  - Classes:
+      - World: classes/World.md
+      - Zone: classes/Zone.md
+      - Worker: classes/Worker.md
+  - Utils: utils.md
