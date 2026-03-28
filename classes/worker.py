@@ -11,6 +11,7 @@ class Worker:
         self.zone = zone
         self.type = type
         self.income = income
+        self.actions=[]
         self.is_fraud = False
         self.fraud_dist = distribute_prob(n=7, total_prob=fraud_prob, sigma=1.0)
     

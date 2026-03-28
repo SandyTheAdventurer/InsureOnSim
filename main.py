@@ -13,6 +13,7 @@ assert config["MAX_ZONE_CONNECTIONS"] < config["N_ZONES"], "Maximum connections 
 assert config["MIN_ZONE_CONNECTIONS"] <= config["MAX_ZONE_CONNECTIONS"], "Minimum connections must be less than or equal to maximum connections"
 
 app = FastAPI()
+world = None
 
 @app.get("/", response_model=MessageResponse)
 def read_root():
@@ -33,7 +34,9 @@ def init_world():
         min_zone_distance=config["MIN_ZONE_DISTANCE"],
         max_zone_distance=config["MAX_ZONE_DISTANCE"],
         fraud_fraction=config["FRAUD_FRACTION"],
+        worker_type_fraction=config["WORKER_TYPE_FRACTION"],
         income_range=config["INCOME_RANGE"],
+        len_actions=config["LEN_ACTIONS"],
         lockdown_hotspot_fraction=config["LOCKDOWN_HOTSPOT_FRACTION"],
         disaster_hotspot_fraction=config["DISASTER_HOTSPOT_FRACTION"],
         hotspot_event_prob=config["HOTSPOT_EVENT_PROB"]
@@ -99,9 +102,10 @@ def get_worker_state(worker_id: int):
         id=worker.id,
         zone_id=worker.zone.id,
         type=worker.type,
-        income=worker.income
+        income=worker.income,
+        actions=worker.actions
     )
-
+    
 @app.get("/world_state", response_model=WorldState)
 def get_world_state():
     global world

@@ -34,8 +34,14 @@ class WorkerState(BaseModel):
     zone_id: int
     type: int
     income: int
+    actions: list
 
 class WorldState(BaseModel):
     day: int
     zones: list
     workers: list
+
+class WorkerActions(BaseModel):
+    worker_id: int
+    actions: list
+    working_hours: int

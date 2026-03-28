@@ -47,8 +47,8 @@ class Zone:
 class World:
     def __init__(self, seed: int, n_zones: int, n_users: int, zone_types: list, weather_disaster_types: list,
                  min_zone_connections: int, max_zone_connections: int, min_zone_distance: int, max_zone_distance: int,
-                 fraud_fraction: float, income_range: tuple, lockdown_hotspot_fraction: float, disaster_hotspot_fraction: float,
-                 hotspot_event_prob: float):
+                 fraud_fraction: float, worker_type_fraction: float, income_range: tuple, lockdown_hotspot_fraction: float, disaster_hotspot_fraction: float,
+                 hotspot_event_prob: float,len_actions: int) -> None:
         self.seed = seed
         self.n_zones = n_zones
         self.n_users = n_users
@@ -59,10 +59,12 @@ class World:
         self.min_zone_distance = min_zone_distance
         self.max_zone_distance = max_zone_distance
         self.fraud_fraction = fraud_fraction
+        self.worker_type_fraction = worker_type_fraction
         self.income_range = income_range
         self.lockdown_hotspot_fraction = lockdown_hotspot_fraction
         self.disaster_hotspot_fraction = disaster_hotspot_fraction
         self.hotspot_event_prob = hotspot_event_prob
+        self.len_actions = len_actions
 
         self.days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         self.day_idx = 0
@@ -100,19 +102,22 @@ class World:
     def setup_workers(self):
         for i in range(self.n_users):
             zone = random.choice(list(self.zones.values()))
-            worker_type = 1 if random.random() < self.fraud_fraction else 0
+            worker_type = 1 if random.random() < self.worker_type_fraction else 0
             if random.random() < self.fraud_fraction:
                 fraud_prob = random.uniform(0.5, 1.0)
             else:
                 fraud_prob = random.uniform(0.0, 0.5)
-            income = random.uniform(*self.income_range)
+            income = int(random.uniform(*self.income_range))
+            actions=[]
             worker = Worker(id=i,
                             world=self,
                             zone=zone,
                             type=worker_type,
                             fraud_prob=fraud_prob,
-                            income=income
+                            income=income,
                             )
+            actions=self.worker_daily_action(worker)
+            worker.actions=actions
             self.workers[worker.id] = worker
 
     def run_day(self):
@@ -171,8 +176,27 @@ class World:
         return DaySummary(**summary)
 
     def worker_daily_action(self, worker: Worker):
-        pass
-
+        total_actions=["long commute single delivery","long commute multiple deliveries","short commute multiple deliveries","short commute single delivery","leisure"]
+        actions=[]
+        n=10
+        peak=None
+        if(worker.type==0):
+            n=5
+            peak=2
+        for i in range(n):
+            prob=distribute_prob(n=5,peak=peak)
+            rand=random.random()
+            cumulative_prob=0
+            action=0
+            for j,p in enumerate(prob):
+                cumulative_prob+=p
+                if(rand<cumulative_prob):
+                    action=j
+                    break
+            actions.append(total_actions[action])
+        if(n==5):
+            actions.extend(["leisure"]*5)
+        return actions
     def simulate(self, n_days: int, logger=None):
         for day in range(n_days):
             if logger:
