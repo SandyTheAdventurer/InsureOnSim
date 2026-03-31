@@ -40,8 +40,3 @@ class WorldState(BaseModel):
     day: int
     zones: list
     workers: list
-
-class WorkerActions(BaseModel):
-    worker_id: int
-    actions: list
-    working_hours: int

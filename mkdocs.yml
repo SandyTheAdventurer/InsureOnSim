@@ -1,9 +1,10 @@
 site_name: InsureOnSim Documentation
 nav:
   - Home: index.md
-  - API: api.md
+  - API Reference: api.md
   - Classes:
-      - World: classes/World.md
-      - Zone: classes/Zone.md
+      - World & Zone: classes/World.md
       - Worker: classes/Worker.md
+      - Zone States: classes/Zone.md
+  - Data Models: models.md
   - Utils: utils.md
