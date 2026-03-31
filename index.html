@@ -38,24 +38,27 @@
                                 <a href="." class="nav-link active" aria-current="page">Home</a>
                             </li>
                             <li class="nav-item">
-                                <a href="api/" class="nav-link">API</a>
+                                <a href="api/" class="nav-link">API Reference</a>
                             </li>
                             <li class="nav-item dropdown">
                                 <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Classes</a>
                                 <ul class="dropdown-menu">
                                     
 <li>
-    <a href="classes/World/" class="dropdown-item">World</a>
-</li>
-                                    
-<li>
-    <a href="classes/Zone/" class="dropdown-item">Zone</a>
+    <a href="classes/World/" class="dropdown-item">World & Zone</a>
 </li>
                                     
 <li>
     <a href="classes/Worker/" class="dropdown-item">Worker</a>
 </li>
+                                    
+<li>
+    <a href="classes/Zone/" class="dropdown-item">Zone States</a>
+</li>
                                 </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="models/" class="nav-link">Data Models</a>
                             </li>
                             <li class="nav-item">
                                 <a href="utils/" class="nav-link">Utils</a>
@@ -96,13 +99,21 @@
     <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
         <ul class="nav flex-column">
             
-            <li class="nav-item" data-bs-level="1"><a href="#welcome-to-mkdocs" class="nav-link">Welcome to MkDocs</a>
+            <li class="nav-item" data-bs-level="1"><a href="#insureonsim-documentation" class="nav-link">InsureOnSim Documentation</a>
               <ul class="nav flex-column">
-            <li class="nav-item" data-bs-level="2"><a href="#project-layout" class="nav-link">Project layout</a>
+            <li class="nav-item" data-bs-level="2"><a href="#project-layout" class="nav-link">Project Layout</a>
               <ul class="nav flex-column">
               </ul>
             </li>
-            <li class="nav-item" data-bs-level="2"><a href="#how-to-run" class="nav-link">How to run</a>
+            <li class="nav-item" data-bs-level="2"><a href="#how-to-run" class="nav-link">How to Run</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#quick-start-workflow" class="nav-link">Quick Start Workflow</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#dependencies" class="nav-link">Dependencies</a>
               <ul class="nav flex-column">
               </ul>
             </li>
@@ -113,18 +124,65 @@
 </div></div>
                     <div class="col-md-9" role="main">
 
-<h1 id="welcome-to-mkdocs">Welcome to MkDocs</h1>
-<p>For full documentation visit <a href="https://www.mkdocs.org">mkdocs.org</a>.</p>
-<h2 id="project-layout">Project layout</h2>
-<pre><code>config.json: Contains sample configuration for simulation
-main.py: Runs a sample simulation
-docs: Contains MKDocs documentations
-classes: Contains classes used
+<h1 id="insureonsim-documentation">InsureOnSim Documentation</h1>
+<p>InsureOnSim is a configurable insurance risk simulation engine exposed as a REST API. It models a world of interconnected geographic zones populated by workers, and simulates day-by-day events such as civil lockdowns, weather disasters, and worker behaviour including fraudulent claims.</p>
+<h2 id="project-layout">Project Layout</h2>
+<pre><code>InsureOnSim/
+├── main.py           # FastAPI application and all API endpoints
+├── config.json       # Simulation parameters and defaults
+├── requirements.txt  # Python dependencies
+├── mkdocs.yml        # MkDocs site configuration
+├── classes/
+│   ├── world.py      # Zone and World simulation logic
+│   ├── worker.py     # Worker agent logic
+│   ├── models.py     # Pydantic request/response models
+│   └── utils.py      # Probability distribution utility
+└── docs/             # This documentation
 </code></pre>
-<h2 id="how-to-run">How to run</h2>
-<pre><code>Simply run 
-`uvicorn main:app`
-</code></pre></div>
+<h2 id="how-to-run">How to Run</h2>
+<p>Install dependencies:</p>
+<pre><code class="language-bash">pip install -r requirements.txt
+</code></pre>
+<p>Start the API server:</p>
+<pre><code class="language-bash">uvicorn main:app
+</code></pre>
+<p>The API will be available at <code>http://localhost:8000</code>. Interactive Swagger docs are at <code>http://localhost:8000/docs</code>.</p>
+<h2 id="quick-start-workflow">Quick Start Workflow</h2>
+<p>A typical simulation session follows this sequence:</p>
+<ol>
+<li><strong>POST <code>/init</code></strong> — Initialise the world (zones and workers) from <code>config.json</code>.</li>
+<li><strong>POST <code>/run_day</code></strong> — Advance the simulation by one day.</li>
+<li><strong>GET <code>/weather_alerts</code></strong> / <strong>GET <code>/government_alerts</code></strong> — Query active alerts.</li>
+<li><strong>GET <code>/zone/{zone_id}</code></strong> / <strong>GET <code>/worker/{worker_id}</code></strong> / <strong>GET <code>/world_state</code></strong> — Inspect entity state.</li>
+<li><strong>POST <code>/reset</code></strong> — Tear down the world to start a new simulation.</li>
+</ol>
+<h2 id="dependencies">Dependencies</h2>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fastapi</td>
+<td>Web framework for the REST API</td>
+</tr>
+<tr>
+<td>uvicorn</td>
+<td>ASGI server to run the FastAPI application</td>
+</tr>
+<tr>
+<td>numpy</td>
+<td>Random number generation and probability math</td>
+</tr>
+<tr>
+<td>pydantic</td>
+<td>Data validation and response serialisation</td>
+</tr>
+</tbody>
+</table></div>
             </div>
         </div>
 
@@ -206,5 +264,5 @@ classes: Contains classes used
 
 <!--
 MkDocs version : 1.6.1
-Build Date UTC : 2026-03-28 09:16:36.715932+00:00
+Build Date UTC : 2026-03-31 05:14:58.183829+00:00
 -->

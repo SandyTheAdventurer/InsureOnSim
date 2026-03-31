@@ -8,7 +8,7 @@
         
         
         <link rel="shortcut icon" href="../../img/favicon.ico">
-        <title>World - InsureOnSim Documentation</title>
+        <title>World & Zone - InsureOnSim Documentation</title>
         <link href="../../css/bootstrap.min.css" rel="stylesheet">
         <link href="../../css/fontawesome.min.css" rel="stylesheet">
         <link href="../../css/brands.min.css" rel="stylesheet">
@@ -38,24 +38,27 @@
                                 <a href="../.." class="nav-link">Home</a>
                             </li>
                             <li class="nav-item">
-                                <a href="../../api/" class="nav-link">API</a>
+                                <a href="../../api/" class="nav-link">API Reference</a>
                             </li>
                             <li class="nav-item dropdown">
                                 <a href="#" class="nav-link dropdown-toggle active" aria-current="page" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Classes</a>
                                 <ul class="dropdown-menu">
                                     
 <li>
-    <a href="./" class="dropdown-item active" aria-current="page">World</a>
-</li>
-                                    
-<li>
-    <a href="../Zone/" class="dropdown-item">Zone</a>
+    <a href="./" class="dropdown-item active" aria-current="page">World & Zone</a>
 </li>
                                     
 <li>
     <a href="../Worker/" class="dropdown-item">Worker</a>
 </li>
+                                    
+<li>
+    <a href="../Zone/" class="dropdown-item">Zone States</a>
+</li>
                                 </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../../models/" class="nav-link">Data Models</a>
                             </li>
                             <li class="nav-item">
                                 <a href="../../utils/" class="nav-link">Utils</a>
@@ -74,7 +77,7 @@
                                 </a>
                             </li>
                             <li class="nav-item">
-                                <a rel="next" href="../Zone/" class="nav-link">
+                                <a rel="next" href="../Worker/" class="nav-link">
                                     Next <i class="fa fa-arrow-right"></i>
                                 </a>
                             </li>
@@ -95,12 +98,248 @@
     
     <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
         <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#world-zone" class="nav-link">World &amp; Zone</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-bs-level="2"><a href="#zone" class="nav-link">Zone</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#world" class="nav-link">World</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
         </ul>
     </div>
 </div></div>
                     <div class="col-md-9" role="main">
 
-<p>World documentation</p></div>
+<h1 id="world-zone">World &amp; Zone</h1>
+<p><code>classes/world.py</code> contains two classes: <code>Zone</code> and <code>World</code>. <code>Zone</code> represents a single geographic region; <code>World</code> acts as the top-level simulation engine that owns and orchestrates all zones and workers.</p>
+<hr />
+<h2 id="zone">Zone</h2>
+<pre><code class="language-python">class Zone(id, type, n_connections, hostpot_type, event_prob, event_info)
+</code></pre>
+<p>A single geographic region in the simulation. Zones have a civil state (stable or lockdown), a weather state (clear or disaster), and a list of active alerts. They are connected to neighbouring zones with distances.</p>
+<h3 id="constructor-parameters">Constructor Parameters</h3>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>int</td>
+<td>Unique integer identifier for this zone.</td>
+</tr>
+<tr>
+<td><code>type</code></td>
+<td>str</td>
+<td>Zone category label (e.g. <code>"A"</code>, <code>"B"</code>, <code>"C"</code>).</td>
+</tr>
+<tr>
+<td><code>n_connections</code></td>
+<td>int</td>
+<td>Target number of neighbouring zones to connect to during world setup.</td>
+</tr>
+<tr>
+<td><code>hostpot_type</code></td>
+<td>int</td>
+<td><code>0</code> = no events; <code>1</code> = lockdown only; <code>2</code> = weather disaster only; <code>3</code> = both.</td>
+</tr>
+<tr>
+<td><code>event_prob</code></td>
+<td>float</td>
+<td>Total daily event probability, distributed across the 7 days of the week by <code>distribute_prob</code>.</td>
+</tr>
+<tr>
+<td><code>event_info</code></td>
+<td>str</td>
+<td>Label for the event that fires (e.g. <code>"flood"</code>, <code>"lockdown"</code>).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="attributes">Attributes</h3>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>nearby_zones</code></td>
+<td>dict[int,int]</td>
+<td>Maps neighbour zone IDs to their distances in km.</td>
+</tr>
+<tr>
+<td><code>civil_state</code></td>
+<td>str</td>
+<td>Current civil status: <code>"stable"</code> or <code>"lockdown"</code>.</td>
+</tr>
+<tr>
+<td><code>weather</code></td>
+<td>str</td>
+<td>Current weather status: <code>"clear"</code> or <code>"disaster"</code>.</td>
+</tr>
+<tr>
+<td><code>alerts</code></td>
+<td>list[str]</td>
+<td>Accumulated alert messages for this zone.</td>
+</tr>
+<tr>
+<td><code>event_prob_dist</code></td>
+<td>np.ndarray</td>
+<td>7-element array of daily event probabilities (one per day of week).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="methods">Methods</h3>
+<h4 id="add_connectionother_zone-max_zone_distance-min_zone_distance-update_probstrue"><code>add_connection(other_zone, max_zone_distance, min_zone_distance, update_probs=True)</code></h4>
+<p>Establishes a bidirectional connection between this zone and <code>other_zone</code> with a randomly sampled distance.</p>
+<p>When <code>update_probs=True</code>, the connected zone's event probability distribution is increased based on the distance ratio — closer zones propagate more risk.</p>
+<h4 id="trigger_eventday_idx-tuplebool-bool-str"><code>trigger_event(day_idx) -&gt; Tuple[bool, bool, str]</code></h4>
+<p>Evaluates whether an event fires today using <code>event_prob_dist[day_idx]</code>.</p>
+<p>Returns a tuple <code>(civil_event, weather_event, description)</code>:</p>
+<ul>
+<li>For <code>hotspot_type == 1</code>: sets <code>civil_state = "lockdown"</code>.</li>
+<li>For <code>hotspot_type == 2</code>: sets <code>weather = "disaster"</code>.</li>
+<li>For <code>hotspot_type == 3</code>: triggers both lockdown and disaster.</li>
+<li>Returns <code>(False, False, "")</code> if no event occurs or zone has <code>hotspot_type == 0</code>.</li>
+</ul>
+<hr />
+<h2 id="world">World</h2>
+<pre><code class="language-python">class World(seed, n_zones, n_users, zone_types, weather_disaster_types,
+            min_zone_connections, max_zone_connections, min_zone_distance,
+            max_zone_distance, fraud_fraction, worker_type_fraction,
+            income_range, lockdown_hotspot_fraction, disaster_hotspot_fraction,
+            hotspot_event_prob, len_actions)
+</code></pre>
+<p>The simulation container. Manages all zones and workers, advances time, and aggregates simulation state.</p>
+<h3 id="constructor-parameters_1">Constructor Parameters</h3>
+<p>All parameters correspond directly to keys in <code>config.json</code>. See the <a href="../../api/#configuration-reference-configjson">API reference</a> for a full description of each.</p>
+<h3 id="key-attributes">Key Attributes</h3>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>zones</code></td>
+<td>dict[int, Zone]</td>
+<td>All zones keyed by their integer ID.</td>
+</tr>
+<tr>
+<td><code>workers</code></td>
+<td>dict[int, Worker]</td>
+<td>All workers keyed by their integer ID.</td>
+</tr>
+<tr>
+<td><code>days_passed</code></td>
+<td>int</td>
+<td>Total number of days simulated so far.</td>
+</tr>
+<tr>
+<td><code>day</code></td>
+<td>str</td>
+<td>Current day-of-week name (e.g. <code>"Monday"</code>).</td>
+</tr>
+<tr>
+<td><code>day_idx</code></td>
+<td>int</td>
+<td>Current day-of-week index (0 = Monday, 6 = Sunday).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="methods_1">Methods</h3>
+<h4 id="setup_zones"><code>setup_zones()</code></h4>
+<p>Creates <code>n_zones</code> Zone instances. For each zone:</p>
+<ol>
+<li>Determines <code>hotspot_type</code> by sampling against <code>lockdown_hotspot_fraction</code> and <code>disaster_hotspot_fraction</code>.</li>
+<li>Randomly assigns a type from <code>zone_types</code>.</li>
+<li>Randomly samples <code>n_connections</code> in the allowed range.</li>
+</ol>
+<p>After all zones are created, establishes connections between them until each zone reaches its target <code>n_connections</code>.</p>
+<h4 id="setup_workers"><code>setup_workers()</code></h4>
+<p>Creates <code>n_users</code> Worker instances. For each worker:</p>
+<ol>
+<li>Assigns a random zone.</li>
+<li>Assigns <code>type</code> (0 or 1) based on <code>worker_type_fraction</code>.</li>
+<li>Assigns a <code>fraud_prob</code>: uniform in <code>[0.5, 1.0]</code> for fraud workers, <code>[0.0, 0.5]</code> for honest workers (controlled by <code>fraud_fraction</code>).</li>
+<li>Samples an <code>income</code> from <code>income_range</code>.</li>
+<li>Generates an initial set of daily actions via <code>worker_daily_action</code>.</li>
+</ol>
+<h4 id="run_day"><code>run_day()</code></h4>
+<p>Advances the simulation by one day:</p>
+<ol>
+<li>Increments <code>days_passed</code> and <code>day_idx</code> (wraps around after Sunday).</li>
+<li>Calls <code>trigger_event(day_idx)</code> on every zone.</li>
+<li>Calls <code>worker_daily_action(worker)</code> on every worker to refresh their action list.</li>
+</ol>
+<h4 id="get_weather_alerts-list"><code>get_weather_alerts() -&gt; list</code></h4>
+<p>Returns a list of alert dictionaries for all zones whose <code>weather == "disaster"</code> or whose <code>alerts</code> list contains a known disaster type.</p>
+<h4 id="get_government_alerts-list"><code>get_government_alerts() -&gt; list</code></h4>
+<p>Returns a list of alert dictionaries for all zones whose <code>civil_state == "lockdown"</code> or whose <code>alerts</code> list contains <code>"lockdown"</code>.</p>
+<h4 id="get_day_summary-daysummary"><code>get_day_summary() -&gt; DaySummary</code></h4>
+<p>Aggregates zone states across the entire world into counts:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>lockdown</code></td>
+<td>Zones with <code>civil_state == "lockdown"</code>.</td>
+</tr>
+<tr>
+<td><code>stable</code></td>
+<td>Zones with <code>civil_state == "stable"</code>.</td>
+</tr>
+<tr>
+<td><code>other_civil</code></td>
+<td>Zones with any other civil state.</td>
+</tr>
+<tr>
+<td><code>weather_disaster</code></td>
+<td>Zones with <code>weather == "disaster"</code>.</td>
+</tr>
+<tr>
+<td><code>weather_clear</code></td>
+<td>Zones with <code>weather == "clear"</code>.</td>
+</tr>
+<tr>
+<td><code>other_weather</code></td>
+<td>Zones with any other weather state.</td>
+</tr>
+</tbody>
+</table>
+<h4 id="worker_daily_actionworker-liststr"><code>worker_daily_action(worker) -&gt; list[str]</code></h4>
+<p>Generates a list of daily actions for a worker using a skewed probability distribution over five action categories:</p>
+<ul>
+<li><code>"long commute single delivery"</code></li>
+<li><code>"long commute multiple deliveries"</code></li>
+<li><code>"short commute multiple deliveries"</code></li>
+<li><code>"short commute single delivery"</code></li>
+<li><code>"leisure"</code></li>
+</ul>
+<p>Type <code>0</code> workers generate 5 probabilistic actions with the distribution peaked at index 2 (short commute multiple deliveries), then padded with 5 <code>"leisure"</code> entries. Type <code>1</code> workers generate 10 fully probabilistic actions with a random peak.</p>
+<h4 id="simulaten_days-loggernone"><code>simulate(n_days, logger=None)</code></h4>
+<p>Batch simulation mode. Runs <code>run_day()</code> for <code>n_days</code> iterations, optionally logging each day's summary. Intended for offline / script use rather than API use.</p></div>
             </div>
         </div>
 

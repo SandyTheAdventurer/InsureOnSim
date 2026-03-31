@@ -8,7 +8,7 @@
         
         
         <link rel="shortcut icon" href="../img/favicon.ico">
-        <title>API - InsureOnSim Documentation</title>
+        <title>API Reference - InsureOnSim Documentation</title>
         <link href="../css/bootstrap.min.css" rel="stylesheet">
         <link href="../css/fontawesome.min.css" rel="stylesheet">
         <link href="../css/brands.min.css" rel="stylesheet">
@@ -38,24 +38,27 @@
                                 <a href=".." class="nav-link">Home</a>
                             </li>
                             <li class="nav-item">
-                                <a href="./" class="nav-link active" aria-current="page">API</a>
+                                <a href="./" class="nav-link active" aria-current="page">API Reference</a>
                             </li>
                             <li class="nav-item dropdown">
                                 <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown"  aria-expanded="false">Classes</a>
                                 <ul class="dropdown-menu">
                                     
 <li>
-    <a href="../classes/World/" class="dropdown-item">World</a>
-</li>
-                                    
-<li>
-    <a href="../classes/Zone/" class="dropdown-item">Zone</a>
+    <a href="../classes/World/" class="dropdown-item">World & Zone</a>
 </li>
                                     
 <li>
     <a href="../classes/Worker/" class="dropdown-item">Worker</a>
 </li>
+                                    
+<li>
+    <a href="../classes/Zone/" class="dropdown-item">Zone States</a>
+</li>
                                 </ul>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../models/" class="nav-link">Data Models</a>
                             </li>
                             <li class="nav-item">
                                 <a href="../utils/" class="nav-link">Utils</a>
@@ -95,12 +98,272 @@
     
     <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
         <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#api-reference" class="nav-link">API Reference</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-bs-level="2"><a href="#lifecycle-endpoints" class="nav-link">Lifecycle Endpoints</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#alert-endpoints" class="nav-link">Alert Endpoints</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#state-inspection-endpoints" class="nav-link">State Inspection Endpoints</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#configuration-reference-configjson" class="nav-link">Configuration Reference (config.json)</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
         </ul>
     </div>
 </div></div>
                     <div class="col-md-9" role="main">
 
-<p>The project currently consists of 5 API endpoints</p></div>
+<h1 id="api-reference">API Reference</h1>
+<p>InsureOnSim exposes a REST API built with FastAPI. All endpoints are available once the server is running with <code>uvicorn main:app</code>.</p>
+<hr />
+<h2 id="lifecycle-endpoints">Lifecycle Endpoints</h2>
+<h3 id="get"><code>GET /</code></h3>
+<p>Returns a welcome message describing available actions.</p>
+<p><strong>Response</strong> <code>200 OK</code> — <code>MessageResponse</code></p>
+<pre><code class="language-json">{ &quot;message&quot;: &quot;Welcome to the InsureOnSim API. Use /init to initialize the world and /run_day to simulate a day.&quot; }
+</code></pre>
+<hr />
+<h3 id="post-init"><code>POST /init</code></h3>
+<p>Initialises the simulation world. Reads all parameters from <code>config.json</code>, creates zones, establishes inter-zone connections, and spawns workers.</p>
+<p>Must be called before any other simulation endpoint.</p>
+<p><strong>Response</strong> <code>200 OK</code></p>
+<pre><code class="language-json">{ &quot;message&quot;: &quot;World initialized with zones and workers&quot; }
+</code></pre>
+<p><strong>Error</strong> <code>400 Bad Request</code> — if the world has already been initialised.</p>
+<pre><code class="language-json">{ &quot;detail&quot;: &quot;World already initialized. Use /reset to reinitialize.&quot; }
+</code></pre>
+<hr />
+<h3 id="post-run_day"><code>POST /run_day</code></h3>
+<p>Advances the simulation by one calendar day.</p>
+<ul>
+<li>Increments <code>days_passed</code> and advances the day-of-week index (Monday → Sunday → Monday …).</li>
+<li>Calls <code>trigger_event</code> on every zone, potentially setting <code>civil_state</code> to <code>"lockdown"</code> and/or <code>weather</code> to <code>"disaster"</code>.</li>
+<li>Recalculates daily actions for every worker.</li>
+</ul>
+<p><strong>Response</strong> <code>200 OK</code> — <code>DaySummaryResponse</code></p>
+<pre><code class="language-json">{
+  &quot;message&quot;: &quot;Day 3 completed&quot;,
+  &quot;day_summary&quot;: {
+    &quot;lockdown&quot;: 2,
+    &quot;stable&quot;: 7,
+    &quot;other_civil&quot;: 1,
+    &quot;weather_disaster&quot;: 1,
+    &quot;weather_clear&quot;: 8,
+    &quot;other_weather&quot;: 1
+  }
+}
+</code></pre>
+<p><strong>Error</strong> <code>400 Bad Request</code> — if the world has not been initialised.</p>
+<hr />
+<h3 id="post-reset"><code>POST /reset</code></h3>
+<p>Destroys the current world instance. After calling this endpoint, <code>/init</code> must be called again before running any simulation.</p>
+<p><strong>Response</strong> <code>200 OK</code></p>
+<pre><code class="language-json">{ &quot;message&quot;: &quot;World reset. Use /init to initialize the world again.&quot; }
+</code></pre>
+<hr />
+<h2 id="alert-endpoints">Alert Endpoints</h2>
+<h3 id="get-weather_alerts"><code>GET /weather_alerts</code></h3>
+<p>Returns a list of zones that are currently experiencing a weather disaster.</p>
+<p><strong>Response</strong> <code>200 OK</code> — <code>WeatherAlertsResponse</code></p>
+<pre><code class="language-json">{
+  &quot;weather_alerts&quot;: [
+    { &quot;zone_id&quot;: 4, &quot;zone_type&quot;: &quot;B&quot;, &quot;alert&quot;: &quot;flood&quot; }
+  ]
+}
+</code></pre>
+<p>Each alert contains the zone ID, zone type, and the disaster type (e.g. <code>"storm"</code>, <code>"flood"</code>, <code>"heatwave"</code>).</p>
+<hr />
+<h3 id="get-government_alerts"><code>GET /government_alerts</code></h3>
+<p>Returns a list of zones that are currently under civil lockdown.</p>
+<p><strong>Response</strong> <code>200 OK</code> — <code>GovernmentAlertsResponse</code></p>
+<pre><code class="language-json">{
+  &quot;government_alerts&quot;: [
+    { &quot;zone_id&quot;: 2, &quot;zone_type&quot;: &quot;A&quot;, &quot;alert&quot;: &quot;lockdown&quot; }
+  ]
+}
+</code></pre>
+<hr />
+<h2 id="state-inspection-endpoints">State Inspection Endpoints</h2>
+<h3 id="get-zonezone_id"><code>GET /zone/{zone_id}</code></h3>
+<p>Returns the full current state of a single zone.</p>
+<p><strong>Path parameter:</strong> <code>zone_id</code> — integer ID of the zone.</p>
+<p><strong>Response</strong> <code>200 OK</code> — <code>ZoneState</code></p>
+<pre><code class="language-json">{
+  &quot;id&quot;: 3,
+  &quot;type&quot;: &quot;C&quot;,
+  &quot;nearby_zones&quot;: { &quot;1&quot;: 420, &quot;5&quot;: 730, &quot;7&quot;: 150 },
+  &quot;civil_state&quot;: &quot;stable&quot;,
+  &quot;weather_state&quot;: &quot;clear&quot;,
+  &quot;event_info&quot;: &quot;storm&quot;
+}
+</code></pre>
+<p><code>nearby_zones</code> is a dictionary mapping neighbouring zone IDs to their distances (in km).</p>
+<p><strong>Error</strong> <code>404 Not Found</code> — if the zone ID does not exist.</p>
+<hr />
+<h3 id="get-workerworker_id"><code>GET /worker/{worker_id}</code></h3>
+<p>Returns the current state of a single worker.</p>
+<p><strong>Path parameter:</strong> <code>worker_id</code> — integer ID of the worker.</p>
+<p><strong>Response</strong> <code>200 OK</code> — <code>WorkerState</code></p>
+<pre><code class="language-json">{
+  &quot;id&quot;: 12,
+  &quot;zone_id&quot;: 5,
+  &quot;type&quot;: 1,
+  &quot;income&quot;: 67400,
+  &quot;actions&quot;: [
+    &quot;short commute multiple deliveries&quot;,
+    &quot;leisure&quot;,
+    &quot;long commute single delivery&quot;,
+    &quot;leisure&quot;,
+    &quot;short commute single delivery&quot;
+  ]
+}
+</code></pre>
+<p><code>type</code> is <code>0</code> for a standard worker and <code>1</code> for a high-activity worker.</p>
+<p><strong>Error</strong> <code>404 Not Found</code> — if the worker ID does not exist.</p>
+<hr />
+<h3 id="get-world_state"><code>GET /world_state</code></h3>
+<p>Returns a complete snapshot of the current simulation state — all zones and all workers.</p>
+<p><strong>Response</strong> <code>200 OK</code> — <code>WorldState</code></p>
+<pre><code class="language-json">{
+  &quot;day&quot;: 5,
+  &quot;zones&quot;: [ /* array of ZoneState objects */ ],
+  &quot;workers&quot;: [ /* array of WorkerState objects */ ]
+}
+</code></pre>
+<hr />
+<h2 id="configuration-reference-configjson">Configuration Reference (<code>config.json</code>)</h2>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SEED</code></td>
+<td>int</td>
+<td><code>42</code></td>
+<td>Random seed for reproducible simulations.</td>
+</tr>
+<tr>
+<td><code>N_ZONES</code></td>
+<td>int</td>
+<td><code>10</code></td>
+<td>Number of geographic zones to create.</td>
+</tr>
+<tr>
+<td><code>N_USERS</code></td>
+<td>int</td>
+<td><code>30</code></td>
+<td>Number of worker agents to spawn.</td>
+</tr>
+<tr>
+<td><code>ZONE_TYPES</code></td>
+<td>list[str]</td>
+<td><code>["A","B","C"]</code></td>
+<td>Zone category labels assigned randomly to each zone.</td>
+</tr>
+<tr>
+<td><code>WEATHER_DISASTER_TYPES</code></td>
+<td>list[str]</td>
+<td><code>["storm","flood","heatwave"]</code></td>
+<td>Possible weather disaster event names.</td>
+</tr>
+<tr>
+<td><code>MIN_ZONE_CONNECTIONS</code></td>
+<td>int</td>
+<td><code>3</code></td>
+<td>Minimum number of neighbouring zones each zone must connect to.</td>
+</tr>
+<tr>
+<td><code>MAX_ZONE_CONNECTIONS</code></td>
+<td>int</td>
+<td><code>6</code></td>
+<td>Maximum number of neighbouring zones each zone can connect to.</td>
+</tr>
+<tr>
+<td><code>MIN_ZONE_DISTANCE</code></td>
+<td>int</td>
+<td><code>100</code></td>
+<td>Minimum distance (km) between two connected zones.</td>
+</tr>
+<tr>
+<td><code>MAX_ZONE_DISTANCE</code></td>
+<td>int</td>
+<td><code>1000</code></td>
+<td>Maximum distance (km) between two connected zones.</td>
+</tr>
+<tr>
+<td><code>INCOME_RANGE</code></td>
+<td>[int, int]</td>
+<td><code>[30000, 100000]</code></td>
+<td>Uniform range from which each worker's annual income is sampled.</td>
+</tr>
+<tr>
+<td><code>FRAUD_FRACTION</code></td>
+<td>float</td>
+<td><code>0.3</code></td>
+<td>Fraction of workers initialised with a higher fraud probability (0.5–1.0).</td>
+</tr>
+<tr>
+<td><code>WORKER_TYPE_FRACTION</code></td>
+<td>float</td>
+<td><code>0.4</code></td>
+<td>Fraction of workers assigned as type 1 (high-activity).</td>
+</tr>
+<tr>
+<td><code>LOCKDOWN_HOTSPOT_FRACTION</code></td>
+<td>float</td>
+<td><code>0.2</code></td>
+<td>Fraction of zones that are lockdown hotspots.</td>
+</tr>
+<tr>
+<td><code>DISASTER_HOTSPOT_FRACTION</code></td>
+<td>float</td>
+<td><code>0.2</code></td>
+<td>Fraction of zones that are weather disaster hotspots.</td>
+</tr>
+<tr>
+<td><code>HOTSPOT_EVENT_PROB</code></td>
+<td>float</td>
+<td><code>0.6</code></td>
+<td>Total daily event probability assigned to hotspot zones.</td>
+</tr>
+<tr>
+<td><code>LEN_ACTIONS</code></td>
+<td>int</td>
+<td><code>5</code></td>
+<td>Number of daily action slots generated per worker per day.</td>
+</tr>
+<tr>
+<td><code>N_DAYS</code></td>
+<td>int</td>
+<td><code>7</code></td>
+<td>Used by <code>World.simulate()</code> when running in batch (non-API) mode.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="validation-constraints">Validation Constraints</h3>
+<p>The following assertions are checked at startup:</p>
+<ul>
+<li><code>MIN_ZONE_CONNECTIONS &lt; N_ZONES</code></li>
+<li><code>MAX_ZONE_CONNECTIONS &lt; N_ZONES</code></li>
+<li><code>MIN_ZONE_CONNECTIONS &lt;= MAX_ZONE_CONNECTIONS</code></li>
+</ul></div>
             </div>
         </div>
 
