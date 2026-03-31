@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import List, Any
 
 class MessageResponse(BaseModel):
     message: str
@@ -40,3 +41,36 @@ class WorldState(BaseModel):
     day: int
     zones: list
     workers: list
+
+# --- Claims models ---
+
+class ClaimRecord(BaseModel):
+    worker_id: int
+    zone_id: int
+    zone_type: str
+    income: int
+    worker_type: int
+    reason: str
+    is_fraud: bool
+    day: int
+    day_name: str
+
+class ClaimsResponse(BaseModel):
+    day: int
+    day_name: str
+    total_claims: int
+    legitimate_claims: int
+    fraud_claims: int
+    claims: List[ClaimRecord]
+
+class WorkerClaimHistoryResponse(BaseModel):
+    worker_id: int
+    total_claims: int
+    fraud_claims: int
+    history: List[Any]
+
+class WorkerDecideResponse(BaseModel):
+    worker_id: int
+    filed_claim: bool
+    reason: str | None
+    is_fraud: bool

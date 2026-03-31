@@ -12,13 +12,58 @@ assert config["MIN_ZONE_CONNECTIONS"] < config["N_ZONES"], "Minimum connections 
 assert config["MAX_ZONE_CONNECTIONS"] < config["N_ZONES"], "Maximum connections must be less than total zones"
 assert config["MIN_ZONE_CONNECTIONS"] <= config["MAX_ZONE_CONNECTIONS"], "Minimum connections must be less than or equal to maximum connections"
 
-app = FastAPI()
-world = None
+app = FastAPI(
+    title="InsureOnSim API",
+    description="Parametric insurance simulation engine for InsureOn — Guidewire DevTrails.",
+    version="1.0.0",
+)
+
+world: World | None = None
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _zone_state(zone) -> ZoneState:
+    return ZoneState(
+        id=zone.id,
+        type=zone.type,
+        nearby_zones=zone.nearby_zones,
+        civil_state=zone.civil_state,
+        weather_state=zone.weather,
+        event_info=zone.event_info,
+    )
+
+
+def _worker_state(worker) -> WorkerState:
+    return WorkerState(
+        id=worker.id,
+        zone_id=worker.zone.id,
+        type=worker.type,
+        income=worker.income,
+        actions=worker.actions,
+    )
+
+
+def _require_world():
+    if world is None:
+        raise HTTPException(
+            status_code=400,
+            detail="World not initialized. Use /init to initialize the world first.",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle endpoints
+# ---------------------------------------------------------------------------
 
 @app.get("/", response_model=MessageResponse)
 def read_root():
     return {"message": "Welcome to the InsureOnSim API. Use /init to initialize the world and /run_day to simulate a day."}
-@app.post("/init")
+
+
+@app.post("/init", response_model=MessageResponse)
 def init_world():
     global world
     if world is not None:
@@ -36,95 +81,176 @@ def init_world():
         fraud_fraction=config["FRAUD_FRACTION"],
         worker_type_fraction=config["WORKER_TYPE_FRACTION"],
         income_range=config["INCOME_RANGE"],
-        len_actions=config["LEN_ACTIONS"],
         lockdown_hotspot_fraction=config["LOCKDOWN_HOTSPOT_FRACTION"],
         disaster_hotspot_fraction=config["DISASTER_HOTSPOT_FRACTION"],
-        hotspot_event_prob=config["HOTSPOT_EVENT_PROB"]
+        hotspot_event_prob=config["HOTSPOT_EVENT_PROB"],
+        len_actions=config["LEN_ACTIONS"],
     )
     world.setup_zones()
     world.setup_workers()
     return {"message": "World initialized with zones and workers"}
 
+
 @app.post("/run_day", response_model=DaySummaryResponse)
 def run_day():
-    global world
-    if world is None:
-        raise HTTPException(status_code=400, detail="World not initialized. Use /init to initialize the world first.")
+    _require_world()
     world.run_day()
     return {"message": f"Day {world.day} completed", "day_summary": world.get_day_summary()}
 
-@app.get("/weather_alerts", response_model=WeatherAlertsResponse)
-def weather_alerts():
-    global world
-    if world is None:
-        raise HTTPException(status_code=400, detail="World not initialized. Use /init to initialize the world first.")
-    return {"weather_alerts": world.get_weather_alerts()}
 
-@app.get("/government_alerts", response_model=GovernmentAlertsResponse)
-def government_alerts():
-    global world
-    if world is None:
-        raise HTTPException(status_code=400, detail="World not initialized. Use /init to initialize the world first.")
-    return {"government_alerts": world.get_government_alerts()}
-
-@app.post("/reset")
+@app.post("/reset", response_model=MessageResponse)
 def reset_world():
     global world
     world = None
     return {"message": "World reset. Use /init to initialize the world again."}
 
-@app.get("/zone/{zone_id}", response_model=ZoneState)
-def get_zone_state(zone_id: int):
-    global world
-    if world is None:
-        raise HTTPException(status_code=400, detail="World not initialized. Use /init to initialize the world first.")
-    zone = world.zones.get(zone_id)
-    if zone is None:
-        raise HTTPException(status_code=404, detail="Zone not found")
-    return ZoneState(
-        id=zone.id,
-        type=zone.type,
-        nearby_zones=zone.nearby_zones,
-        civil_state=zone.civil_state,
-        weather_state=zone.weather,
-        event_info=zone.event_info
+
+# ---------------------------------------------------------------------------
+# Alert endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/weather_alerts", response_model=WeatherAlertsResponse)
+def weather_alerts():
+    _require_world()
+    return {"weather_alerts": world.get_weather_alerts()}
+
+
+@app.get("/government_alerts", response_model=GovernmentAlertsResponse)
+def government_alerts():
+    _require_world()
+    return {"government_alerts": world.get_government_alerts()}
+
+
+# ---------------------------------------------------------------------------
+# Claims endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/claims", response_model=ClaimsResponse)
+def process_claims():
+    """
+    Trigger all workers to decide whether to file a claim for the current day.
+    Must be called after /run_day. Each call re-evaluates decide() for all workers.
+    Returns a summary and full list of claims filed today.
+    """
+    _require_world()
+    if world.days_passed == 0:
+        raise HTTPException(status_code=400, detail="No days have been simulated yet. Call /run_day first.")
+
+    claims_today = world.process_claims()
+    fraud_count = sum(1 for c in claims_today if c["is_fraud"])
+    legitimate_count = len(claims_today) - fraud_count
+
+    return ClaimsResponse(
+        day=world.days_passed,
+        day_name=world.day,
+        total_claims=len(claims_today),
+        legitimate_claims=legitimate_count,
+        fraud_claims=fraud_count,
+        claims=[ClaimRecord(**c) for c in claims_today],
     )
 
-@app.get("/worker/{worker_id}", response_model=WorkerState)
-def get_worker_state(worker_id: int):
-    global world
-    if world is None:
-        raise HTTPException(status_code=400, detail="World not initialized. Use /init to initialize the world first.")
+
+@app.get("/claims/history", response_model=ClaimsResponse)
+def all_claims_history():
+    """
+    Returns the full claim history across all workers and all simulated days.
+    """
+    _require_world()
+    all_claims = []
+    for worker in world.workers.values():
+        for entry in worker.claim_history:
+            all_claims.append(ClaimRecord(
+                worker_id=worker.id,
+                zone_id=entry["zone_id"],
+                zone_type=world.zones[entry["zone_id"]].type,
+                income=worker.income,
+                worker_type=worker.type,
+                reason=entry["reason"],
+                is_fraud=entry["is_fraud"],
+                day=entry["day"],
+                day_name=entry["day_name"],
+            ))
+
+    fraud_count = sum(1 for c in all_claims if c.is_fraud)
+    return ClaimsResponse(
+        day=world.days_passed,
+        day_name=world.day,
+        total_claims=len(all_claims),
+        legitimate_claims=len(all_claims) - fraud_count,
+        fraud_claims=fraud_count,
+        claims=all_claims,
+    )
+
+
+@app.get("/worker/{worker_id}/claims", response_model=WorkerClaimHistoryResponse)
+def get_worker_claim_history(worker_id: int):
+    """
+    Returns the full claim history for a single worker.
+    """
+    _require_world()
     worker = world.workers.get(worker_id)
     if worker is None:
         raise HTTPException(status_code=404, detail="Worker not found")
-    return WorkerState(
-        id=worker.id,
-        zone_id=worker.zone.id,
-        type=worker.type,
-        income=worker.income,
-        actions=worker.actions
+
+    fraud_count = sum(1 for c in worker.claim_history if c["is_fraud"])
+    return WorkerClaimHistoryResponse(
+        worker_id=worker.id,
+        total_claims=len(worker.claim_history),
+        fraud_claims=fraud_count,
+        history=worker.claim_history,
     )
-    
+
+
+@app.post("/worker/{worker_id}/decide", response_model=WorkerDecideResponse)
+def worker_decide(worker_id: int):
+    """
+    Triggers a single worker's claim decision for the current day.
+    Useful for testing individual worker behaviour without running all workers.
+    """
+    _require_world()
+    if world.days_passed == 0:
+        raise HTTPException(status_code=400, detail="No days have been simulated yet. Call /run_day first.")
+    worker = world.workers.get(worker_id)
+    if worker is None:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    filed = worker.decide(world.day_idx)
+    reason = worker.claim_history[-1]["reason"] if filed else None
+    return WorkerDecideResponse(
+        worker_id=worker.id,
+        filed_claim=filed,
+        reason=reason,
+        is_fraud=worker.is_fraud,
+    )
+
+
+# ---------------------------------------------------------------------------
+# State inspection endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/zone/{zone_id}", response_model=ZoneState)
+def get_zone_state(zone_id: int):
+    _require_world()
+    zone = world.zones.get(zone_id)
+    if zone is None:
+        raise HTTPException(status_code=404, detail="Zone not found")
+    return _zone_state(zone)
+
+
+@app.get("/worker/{worker_id}", response_model=WorkerState)
+def get_worker_state(worker_id: int):
+    _require_world()
+    worker = world.workers.get(worker_id)
+    if worker is None:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    return _worker_state(worker)
+
+
 @app.get("/world_state", response_model=WorldState)
 def get_world_state():
-    global world
-    if world is None:
-        raise HTTPException(status_code=400, detail="World not initialized. Use /init to initialize the world first.")
+    _require_world()
     return WorldState(
         day=world.days_passed,
-        zones=[ZoneState(
-            id=zone.id,
-            type=zone.type,
-            nearby_zones=zone.nearby_zones,
-            civil_state=zone.civil_state,
-            weather_state=zone.weather,
-            event_info=zone.event_info
-        ) for zone in world.zones.values()],
-        workers=[WorkerState(
-            id=worker.id,
-            zone_id=worker.zone.id,
-            type=worker.type,
-            income=worker.income
-        ) for worker in world.workers.values()]
+        zones=[_zone_state(z) for z in world.zones.values()],
+        workers=[_worker_state(w) for w in world.workers.values()],
     )

@@ -124,10 +124,19 @@ class World:
         self.days_passed += 1
         self.day_idx = (self.day_idx + 1) % 7
         self.day = self.days_of_week[self.day_idx]
+
+        # Reset zone states before triggering new events for the day
+        for zone in self.zones.values():
+            zone.civil_state = "stable"
+            zone.weather = "clear"
+            zone.alerts = []
+
         for zone in self.zones.values():
             zone.trigger_event(self.day_idx)
+
         for worker in self.workers.values():
-            self.worker_daily_action(worker)
+            worker.is_fraud = False
+            worker.actions = self.worker_daily_action(worker)
 
     def get_weather_alerts(self):
         alerts = []
@@ -176,27 +185,62 @@ class World:
         return DaySummary(**summary)
 
     def worker_daily_action(self, worker: Worker):
-        total_actions=["long commute single delivery","long commute multiple deliveries","short commute multiple deliveries","short commute single delivery","leisure"]
-        actions=[]
-        n=10
-        peak=None
-        if(worker.type==0):
-            n=5
-            peak=2
-        for i in range(n):
-            prob=distribute_prob(n=5,peak=peak)
-            rand=random.random()
-            cumulative_prob=0
-            action=0
-            for j,p in enumerate(prob):
-                cumulative_prob+=p
-                if(rand<cumulative_prob):
-                    action=j
+        total_actions = [
+            "long commute single delivery",
+            "long commute multiple deliveries",
+            "short commute multiple deliveries",
+            "short commute single delivery",
+            "leisure",
+        ]
+        actions = []
+        # Type 0: standard worker — probabilistic actions peaked at index 2 (short commute),
+        #         padded with leisure to reach len_actions * 2 total slots.
+        # Type 1: high-activity worker — all len_actions * 2 slots fully probabilistic.
+        n_prob = self.len_actions
+        peak = None
+        if worker.type == 0:
+            peak = 2
+
+        for _ in range(n_prob):
+            prob = distribute_prob(n=5, peak=peak)
+            rand = random.random()
+            cumulative_prob = 0
+            action = 0
+            for j, p in enumerate(prob):
+                cumulative_prob += p
+                if rand < cumulative_prob:
+                    action = j
                     break
             actions.append(total_actions[action])
-        if(n==5):
-            actions.extend(["leisure"]*5)
+
+        # Standard workers pad the remaining slots with leisure
+        if worker.type == 0:
+            actions.extend(["leisure"] * n_prob)
+
         return actions
+    def process_claims(self):
+        """
+        Calls decide() on every worker for the current day.
+        Returns a list of claim dicts for workers who filed a claim today.
+        """
+        claims = []
+        for worker in self.workers.values():
+            filed = worker.decide(self.day_idx)
+            if filed:
+                latest = worker.claim_history[-1]
+                claims.append({
+                    "worker_id": worker.id,
+                    "zone_id": worker.zone.id,
+                    "zone_type": worker.zone.type,
+                    "income": worker.income,
+                    "worker_type": worker.type,
+                    "reason": latest["reason"],
+                    "is_fraud": latest["is_fraud"],
+                    "day": latest["day"],
+                    "day_name": latest["day_name"],
+                })
+        return claims
+
     def simulate(self, n_days: int, logger=None):
         for day in range(n_days):
             if logger:
