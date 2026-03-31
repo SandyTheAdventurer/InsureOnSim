@@ -2,6 +2,7 @@ from classes.world import World
 from classes.models import *
 import logging
 from fastapi import FastAPI, HTTPException
+from typing import List
 import json
 
 logging.basicConfig(level=logging.INFO)
@@ -21,9 +22,6 @@ app = FastAPI(
 world: World | None = None
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _zone_state(zone) -> ZoneState:
     return ZoneState(
@@ -54,9 +52,6 @@ def _require_world():
         )
 
 
-# ---------------------------------------------------------------------------
-# Lifecycle endpoints
-# ---------------------------------------------------------------------------
 
 @app.get("/", response_model=MessageResponse)
 def read_root():
@@ -105,9 +100,6 @@ def reset_world():
     return {"message": "World reset. Use /init to initialize the world again."}
 
 
-# ---------------------------------------------------------------------------
-# Alert endpoints
-# ---------------------------------------------------------------------------
 
 @app.get("/weather_alerts", response_model=WeatherAlertsResponse)
 def weather_alerts():
@@ -121,17 +113,9 @@ def government_alerts():
     return {"government_alerts": world.get_government_alerts()}
 
 
-# ---------------------------------------------------------------------------
-# Claims endpoints
-# ---------------------------------------------------------------------------
 
 @app.post("/claims", response_model=ClaimsResponse)
 def process_claims():
-    """
-    Trigger all workers to decide whether to file a claim for the current day.
-    Must be called after /run_day. Each call re-evaluates decide() for all workers.
-    Returns a summary and full list of claims filed today.
-    """
     _require_world()
     if world.days_passed == 0:
         raise HTTPException(status_code=400, detail="No days have been simulated yet. Call /run_day first.")
@@ -152,9 +136,6 @@ def process_claims():
 
 @app.get("/claims/history", response_model=ClaimsResponse)
 def all_claims_history():
-    """
-    Returns the full claim history across all workers and all simulated days.
-    """
     _require_world()
     all_claims = []
     for worker in world.workers.values():
@@ -184,9 +165,6 @@ def all_claims_history():
 
 @app.get("/worker/{worker_id}/claims", response_model=WorkerClaimHistoryResponse)
 def get_worker_claim_history(worker_id: int):
-    """
-    Returns the full claim history for a single worker.
-    """
     _require_world()
     worker = world.workers.get(worker_id)
     if worker is None:
@@ -203,10 +181,6 @@ def get_worker_claim_history(worker_id: int):
 
 @app.post("/worker/{worker_id}/decide", response_model=WorkerDecideResponse)
 def worker_decide(worker_id: int):
-    """
-    Triggers a single worker's claim decision for the current day.
-    Useful for testing individual worker behaviour without running all workers.
-    """
     _require_world()
     if world.days_passed == 0:
         raise HTTPException(status_code=400, detail="No days have been simulated yet. Call /run_day first.")
@@ -224,9 +198,64 @@ def worker_decide(worker_id: int):
     )
 
 
-# ---------------------------------------------------------------------------
-# State inspection endpoints
-# ---------------------------------------------------------------------------
+
+@app.post("/compare", response_model=CompareResponse)
+def compare_payouts(issued: List[IssuedPayout]):
+    _require_world()
+    if world.days_passed == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No days have been simulated yet. Call /run_day first.",
+        )
+
+    all_today = world.process_claims()
+    legitimate_today: dict[int, str] = {
+        c["worker_id"]: c["reason"]
+        for c in all_today
+        if not c["is_fraud"]
+    }
+
+    backend_issued: dict[int, str] = {p.worker_id: p.reason for p in issued}
+
+    correct: list[CompareEntry] = []
+    missed: list[CompareEntry] = []
+    invalid: list[CompareEntry] = []
+
+    for worker_id, sim_reason in legitimate_today.items():
+        if worker_id in backend_issued:
+            correct.append(CompareEntry(
+                worker_id=worker_id,
+                backend_reason=backend_issued[worker_id],
+                sim_reason=sim_reason,
+            ))
+        else:
+            missed.append(CompareEntry(
+                worker_id=worker_id,
+                backend_reason="not issued",
+                sim_reason=sim_reason,
+            ))
+
+    for worker_id, backend_reason in backend_issued.items():
+        if worker_id not in legitimate_today:
+            invalid.append(CompareEntry(
+                worker_id=worker_id,
+                backend_reason=backend_reason,
+                sim_reason=None,
+            ))
+
+    return CompareResponse(
+        day=world.days_passed,
+        day_name=world.day,
+        submitted=len(issued),
+        true_positives=len(correct),
+        false_negatives=len(missed),
+        false_positives=len(invalid),
+        correct=correct,
+        missed=missed,
+        invalid=invalid,
+    )
+
+
 
 @app.get("/zone/{zone_id}", response_model=ZoneState)
 def get_zone_state(zone_id: int):

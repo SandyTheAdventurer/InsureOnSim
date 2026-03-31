@@ -42,7 +42,6 @@ class WorldState(BaseModel):
     zones: list
     workers: list
 
-# --- Claims models ---
 
 class ClaimRecord(BaseModel):
     worker_id: int
@@ -74,3 +73,24 @@ class WorkerDecideResponse(BaseModel):
     filed_claim: bool
     reason: str | None
     is_fraud: bool
+
+
+class IssuedPayout(BaseModel):
+    worker_id: int
+    reason: str
+
+class CompareEntry(BaseModel):
+    worker_id: int
+    backend_reason: str
+    sim_reason: str | None
+
+class CompareResponse(BaseModel):
+    day: int
+    day_name: str
+    submitted: int
+    true_positives: int
+    false_negatives: int
+    false_positives: int
+    correct: List[CompareEntry]
+    missed: List[CompareEntry] 
+    invalid: List[CompareEntry]

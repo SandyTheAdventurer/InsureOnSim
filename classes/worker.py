@@ -19,16 +19,6 @@ class Worker:
         self.claim_history: List[Dict] = []
 
     def decide(self, day_idx: int) -> bool:
-        """
-        Determines whether the worker files a claim today.
-
-        Returns True if:
-          1. Their zone is under lockdown (legitimate — parametric trigger).
-          2. Their zone has a weather disaster (legitimate — parametric trigger).
-          3. A random draw falls below fraud_dist[day_idx] (fraudulent).
-
-        Records the claim in claim_history.
-        """
         filed = False
         reason = None
 

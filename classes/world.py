@@ -125,7 +125,6 @@ class World:
         self.day_idx = (self.day_idx + 1) % 7
         self.day = self.days_of_week[self.day_idx]
 
-        # Reset zone states before triggering new events for the day
         for zone in self.zones.values():
             zone.civil_state = "stable"
             zone.weather = "clear"
@@ -159,7 +158,7 @@ class World:
                     "alert": "lockdown",
                 })
         return alerts
-        
+
     def get_day_summary(self):
         summary = {
             'lockdown': 0,
@@ -193,9 +192,6 @@ class World:
             "leisure",
         ]
         actions = []
-        # Type 0: standard worker — probabilistic actions peaked at index 2 (short commute),
-        #         padded with leisure to reach len_actions * 2 total slots.
-        # Type 1: high-activity worker — all len_actions * 2 slots fully probabilistic.
         n_prob = self.len_actions
         peak = None
         if worker.type == 0:
@@ -213,7 +209,6 @@ class World:
                     break
             actions.append(total_actions[action])
 
-        # Standard workers pad the remaining slots with leisure
         if worker.type == 0:
             actions.extend(["leisure"] * n_prob)
 
