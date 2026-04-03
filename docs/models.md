@@ -89,6 +89,8 @@ Returned by `GET /worker/{worker_id}` and included in `WorldState`.
 | `zone_id`  | int        | ID of the zone the worker currently occupies.                        |
 | `type`     | int        | Worker activity type: `0` = standard, `1` = high-activity.          |
 | `income`   | int        | Annual income of the worker.                                         |
+| `email`    | str        | Worker email identifier.                                              |
+| `ring_id`  | int \/ null | Fraud ring ID if the worker is in a ring, else `null`.             |
 | `actions`  | list       | List of daily action strings generated for the current day.          |
 
 ---
@@ -104,3 +106,30 @@ Returned by `GET /world_state`.
 | `workers` | list[WorkerState]| State of every worker in the world.    |
 
 ---
+
+## Claims Models
+
+### `ClaimRecord`
+
+| Field         | Type       | Description                                                     |
+|---------------|------------|-----------------------------------------------------------------|
+| `worker_id`   | int        | Worker integer ID.                                              |
+| `email`       | str        | Worker email identifier.                                        |
+| `zone_id`     | int        | Worker zone ID at the time of claim.                            |
+| `zone_type`   | str        | Zone type of the worker at claim time.                          |
+| `income`      | int        | Worker annual income.                                            |
+| `worker_type` | int        | Worker type (`0` or `1`).                                       |
+| `reason`      | str        | Claim reason (e.g. disaster, lockdown, fraud, fraud_ring).      |
+| `is_fraud`    | bool       | Whether the claim was fraudulent.                                |
+| `ring_id`     | int \/ null | Fraud ring ID if applicable.                                  |
+| `day`         | int        | Simulation day index for the claim.                              |
+| `day_name`    | str        | Day name (Monday-Sunday).                                       |
+
+---
+
+### `FraudRingsResponse`
+
+| Field         | Type                 | Description                                   |
+|---------------|----------------------|-----------------------------------------------|
+| `total_rings` | int                  | Number of fraud rings in the current world.   |
+| `rings`       | dict[int, list[int]] | Ring IDs mapped to member worker IDs.         |

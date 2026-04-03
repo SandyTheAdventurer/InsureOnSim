@@ -6,19 +6,33 @@ if TYPE_CHECKING:
 
 
 class Worker:
-    def __init__(self, id: int, world: 'World', zone: 'Zone', type: int, fraud_prob: float, income: float) -> None:
+    def __init__(
+        self,
+        id: int,
+        world: 'World',
+        zone: 'Zone',
+        type: int,
+        fraud_prob: float,
+        income: float,
+        email: str,
+        ring_id: int | None = None,
+        ring_boost: float = 0.0,
+    ) -> None:
         self.id = id
         self.world = world
         self.zone = zone
         self.type = type
         self.income = income
+        self.email = email
+        self.ring_id = ring_id
+        self.ring_boost = ring_boost
         self.actions: List[str] = []
         self.is_fraud = False
         self.fraud_dist = distribute_prob(n=7, total_prob=fraud_prob, sigma=1.0)
 
         self.claim_history: List[Dict] = []
 
-    def decide(self, day_idx: int) -> bool:
+    def decide(self, day_idx: int, ring_pressure: bool = False) -> bool:
         filed = False
         reason = None
 
@@ -34,10 +48,14 @@ class Worker:
             filed = True
             reason = "disaster"
             self.is_fraud = False
-        elif random.random() < self.fraud_dist[day_idx]:
-            filed = True
-            reason = "fraud"
-            self.is_fraud = True
+        else:
+            fraud_threshold = self.fraud_dist[day_idx]
+            if ring_pressure and self.ring_id is not None:
+                fraud_threshold = min(1.0, fraud_threshold + self.ring_boost)
+            if random.random() < fraud_threshold:
+                filed = True
+                reason = "fraud_ring" if ring_pressure and self.ring_id is not None else "fraud"
+                self.is_fraud = True
 
         if filed:
             self.claim_history.append({
@@ -46,6 +64,8 @@ class Worker:
                 "zone_id": self.zone.id,
                 "reason": reason,
                 "is_fraud": self.is_fraud,
+                "ring_id": self.ring_id,
+                "email": self.email,
             })
 
         return filed

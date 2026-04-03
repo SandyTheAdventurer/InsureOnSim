@@ -35,6 +35,8 @@ class WorkerState(BaseModel):
     zone_id: int
     type: int
     income: int
+    email: str
+    ring_id: int | None
     actions: list
 
 class WorldState(BaseModel):
@@ -45,14 +47,20 @@ class WorldState(BaseModel):
 
 class ClaimRecord(BaseModel):
     worker_id: int
+    email: str
     zone_id: int
     zone_type: str
     income: int
     worker_type: int
     reason: str
     is_fraud: bool
+    ring_id: int | None
     day: int
     day_name: str
+
+class FraudRingsResponse(BaseModel):
+    total_rings: int
+    rings: dict[int, list[int]]
 
 class ClaimsResponse(BaseModel):
     day: int

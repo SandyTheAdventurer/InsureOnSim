@@ -48,7 +48,9 @@ class World:
     def __init__(self, seed: int, n_zones: int, n_users: int, zone_types: list, weather_disaster_types: list,
                  min_zone_connections: int, max_zone_connections: int, min_zone_distance: int, max_zone_distance: int,
                  fraud_fraction: float, worker_type_fraction: float, income_range: tuple, lockdown_hotspot_fraction: float, disaster_hotspot_fraction: float,
-                 hotspot_event_prob: float,len_actions: int) -> None:
+                 hotspot_event_prob: float, len_actions: int, fraud_ring_fraction: float = 0.35,
+                 min_fraud_ring_size: int = 2, max_fraud_ring_size: int = 5,
+                 fraud_ring_activation_prob: float = 0.6, fraud_ring_boost: float = 0.25) -> None:
         self.seed = seed
         self.n_zones = n_zones
         self.n_users = n_users
@@ -65,6 +67,11 @@ class World:
         self.disaster_hotspot_fraction = disaster_hotspot_fraction
         self.hotspot_event_prob = hotspot_event_prob
         self.len_actions = len_actions
+        self.fraud_ring_fraction = min(max(fraud_ring_fraction, 0.0), 1.0)
+        self.min_fraud_ring_size = max(2, min_fraud_ring_size)
+        self.max_fraud_ring_size = max(self.min_fraud_ring_size, max_fraud_ring_size)
+        self.fraud_ring_activation_prob = min(max(fraud_ring_activation_prob, 0.0), 1.0)
+        self.fraud_ring_boost = max(0.0, fraud_ring_boost)
 
         self.days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         self.day_idx = 0
@@ -72,6 +79,7 @@ class World:
         self.days_passed = 0
         self.zones = {}
         self.workers = {}
+        self.fraud_rings = {}
 
         random.seed(seed)
 
@@ -100,6 +108,7 @@ class World:
                     zone.add_connection(other_zone, self.max_zone_distance, self.min_zone_distance)
 
     def setup_workers(self):
+        workers_created = []
         for i in range(self.n_users):
             zone = random.choice(list(self.zones.values()))
             worker_type = 1 if random.random() < self.worker_type_fraction else 0
@@ -109,16 +118,55 @@ class World:
                 fraud_prob = random.uniform(0.0, 0.5)
             income = int(random.uniform(*self.income_range))
             actions=[]
+            email = f"worker{i}@insureonsim.local"
             worker = Worker(id=i,
                             world=self,
                             zone=zone,
                             type=worker_type,
                             fraud_prob=fraud_prob,
                             income=income,
+                            email=email,
+                            ring_boost=self.fraud_ring_boost,
                             )
             actions=self.worker_daily_action(worker)
             worker.actions=actions
             self.workers[worker.id] = worker
+            workers_created.append(worker)
+
+        self._assign_fraud_rings(workers_created)
+
+    def _assign_fraud_rings(self, workers: List[Worker]) -> None:
+        self.fraud_rings = {}
+        fraud_candidates = [w for w in workers if float(w.fraud_dist.sum()) >= 0.5]
+        if len(fraud_candidates) < self.min_fraud_ring_size:
+            return
+
+        random.shuffle(fraud_candidates)
+        target_members = max(
+            self.min_fraud_ring_size,
+            int(len(fraud_candidates) * self.fraud_ring_fraction),
+        )
+        target_members = min(target_members, len(fraud_candidates))
+        selected = fraud_candidates[:target_members]
+
+        ring_id = 0
+        idx = 0
+        while idx < len(selected):
+            remaining = len(selected) - idx
+            ring_size = random.randint(self.min_fraud_ring_size, self.max_fraud_ring_size)
+            if remaining < self.min_fraud_ring_size:
+                break
+            ring_size = min(ring_size, remaining)
+            if remaining - ring_size == 1:
+                ring_size += 1
+
+            members = selected[idx: idx + ring_size]
+            for member in members:
+                member.ring_id = ring_id
+            self.fraud_rings[ring_id] = [member.id for member in members]
+
+            ring_id += 1
+            idx += ring_size
 
     def run_day(self):
         self.days_passed += 1
@@ -219,18 +267,25 @@ class World:
         Returns a list of claim dicts for workers who filed a claim today.
         """
         claims = []
+        active_rings = {
+            ring_id for ring_id in self.fraud_rings
+            if random.random() < self.fraud_ring_activation_prob
+        }
         for worker in self.workers.values():
-            filed = worker.decide(self.day_idx)
+            ring_pressure = worker.ring_id in active_rings if worker.ring_id is not None else False
+            filed = worker.decide(self.day_idx, ring_pressure=ring_pressure)
             if filed:
                 latest = worker.claim_history[-1]
                 claims.append({
                     "worker_id": worker.id,
+                    "email": worker.email,
                     "zone_id": worker.zone.id,
                     "zone_type": worker.zone.type,
                     "income": worker.income,
                     "worker_type": worker.type,
                     "reason": latest["reason"],
                     "is_fraud": latest["is_fraud"],
+                    "ring_id": latest["ring_id"],
                     "day": latest["day"],
                     "day_name": latest["day_name"],
                 })

@@ -40,6 +40,8 @@ def _worker_state(worker) -> WorkerState:
         zone_id=worker.zone.id,
         type=worker.type,
         income=worker.income,
+        email=worker.email,
+        ring_id=worker.ring_id,
         actions=worker.actions,
     )
 
@@ -80,6 +82,11 @@ def init_world():
         disaster_hotspot_fraction=config["DISASTER_HOTSPOT_FRACTION"],
         hotspot_event_prob=config["HOTSPOT_EVENT_PROB"],
         len_actions=config["LEN_ACTIONS"],
+        fraud_ring_fraction=config.get("FRAUD_RING_FRACTION", 0.35),
+        min_fraud_ring_size=config.get("MIN_FRAUD_RING_SIZE", 2),
+        max_fraud_ring_size=config.get("MAX_FRAUD_RING_SIZE", 5),
+        fraud_ring_activation_prob=config.get("FRAUD_RING_ACTIVATION_PROB", 0.6),
+        fraud_ring_boost=config.get("FRAUD_RING_BOOST", 0.25),
     )
     world.setup_zones()
     world.setup_workers()
@@ -142,12 +149,14 @@ def all_claims_history():
         for entry in worker.claim_history:
             all_claims.append(ClaimRecord(
                 worker_id=worker.id,
+                email=worker.email,
                 zone_id=entry["zone_id"],
                 zone_type=world.zones[entry["zone_id"]].type,
                 income=worker.income,
                 worker_type=worker.type,
                 reason=entry["reason"],
                 is_fraud=entry["is_fraud"],
+                ring_id=entry.get("ring_id"),
                 day=entry["day"],
                 day_name=entry["day_name"],
             ))
@@ -282,4 +291,13 @@ def get_world_state():
         day=world.days_passed,
         zones=[_zone_state(z) for z in world.zones.values()],
         workers=[_worker_state(w) for w in world.workers.values()],
+    )
+
+
+@app.get("/fraud_rings", response_model=FraudRingsResponse)
+def get_fraud_rings():
+    _require_world()
+    return FraudRingsResponse(
+        total_rings=len(world.fraud_rings),
+        rings=world.fraud_rings,
     )

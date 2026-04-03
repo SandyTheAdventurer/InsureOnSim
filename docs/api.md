@@ -187,6 +187,25 @@ Returns a complete snapshot of the current simulation state — all zones and al
 
 ---
 
+### `GET /fraud_rings`
+
+Returns the currently generated fraud rings and their member worker IDs.
+
+**Response** `200 OK` — `FraudRingsResponse`
+
+```json
+{
+  "total_rings": 3,
+  "rings": {
+    "0": [1, 4, 9],
+    "1": [7, 12],
+    "2": [18, 20, 22, 25]
+  }
+}
+```
+
+---
+
 ## Configuration Reference (`config.json`)
 
 | Key                         | Type          | Default                          | Description                                                                 |
@@ -202,6 +221,11 @@ Returns a complete snapshot of the current simulation state — all zones and al
 | `MAX_ZONE_DISTANCE`         | int           | `1000`                           | Maximum distance (km) between two connected zones.                          |
 | `INCOME_RANGE`              | [int, int]    | `[30000, 100000]`                | Uniform range from which each worker's annual income is sampled.            |
 | `FRAUD_FRACTION`            | float         | `0.3`                            | Fraction of workers initialised with a higher fraud probability (0.5–1.0).  |
+| `FRAUD_RING_FRACTION`       | float         | `0.35`                           | Fraction of fraud-prone workers assigned to fraud rings.                     |
+| `MIN_FRAUD_RING_SIZE`       | int           | `2`                              | Minimum number of workers in a fraud ring.                                   |
+| `MAX_FRAUD_RING_SIZE`       | int           | `5`                              | Maximum number of workers in a fraud ring.                                   |
+| `FRAUD_RING_ACTIVATION_PROB`| float         | `0.6`                            | Daily chance that a ring coordinates fraudulent claim submissions.            |
+| `FRAUD_RING_BOOST`          | float         | `0.25`                           | Fraud probability boost applied during an active ring day.                    |
 | `WORKER_TYPE_FRACTION`      | float         | `0.4`                            | Fraction of workers assigned as type 1 (high-activity).                    |
 | `LOCKDOWN_HOTSPOT_FRACTION` | float         | `0.2`                            | Fraction of zones that are lockdown hotspots.                               |
 | `DISASTER_HOTSPOT_FRACTION` | float         | `0.2`                            | Fraction of zones that are weather disaster hotspots.                       |
