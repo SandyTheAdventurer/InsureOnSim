@@ -443,3 +443,42 @@ def run_integrated_backend_test_day():
 def backend_fraud_audit():
     bridge = _get_backend_bridge()
     return bridge.collect_fraud_audit()
+
+@app.get("/backend/fraud_accuracy", response_model=BackendFraudAccuracyResponse)
+def backend_fraud_accuracy():
+    _require_world()
+    bridge = _get_backend_bridge()
+    summary = bridge.collect_worker_flag_summary()
+    onboarded_ids = set(summary.get("onboarded_worker_ids", []))
+
+    sim_fraud_workers = set()
+    for worker_id in onboarded_ids:
+        worker = world.workers.get(worker_id)
+        if not worker:
+            continue
+        if any(entry.get("is_fraud", False) for entry in worker.claim_history):
+            sim_fraud_workers.add(worker_id)
+
+    sim_legit_workers = onboarded_ids - sim_fraud_workers
+    backend_flagged_workers = set(summary.get("flagged_workers", []))
+
+    true_positive = len(sim_fraud_workers & backend_flagged_workers)
+    false_positive = len(backend_flagged_workers - sim_fraud_workers)
+    false_negative = len(sim_fraud_workers - backend_flagged_workers)
+    true_negative = len(sim_legit_workers - backend_flagged_workers)
+
+    precision = round(true_positive / (true_positive + false_positive), 4) if (true_positive + false_positive) else 0.0
+    recall = round(true_positive / (true_positive + false_negative), 4) if (true_positive + false_negative) else 0.0
+
+    return BackendFraudAccuracyResponse(
+        workers_checked=len(onboarded_ids),
+        sim_fraud_workers=len(sim_fraud_workers),
+        sim_legit_workers=len(sim_legit_workers),
+        backend_flagged_workers=len(backend_flagged_workers),
+        true_positive=true_positive,
+        false_positive=false_positive,
+        false_negative=false_negative,
+        true_negative=true_negative,
+        precision=precision,
+        recall=recall,
+    )

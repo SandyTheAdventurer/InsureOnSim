@@ -143,3 +143,15 @@ class BackendDayTestResponse(BaseModel):
     backend_monitor_processed: int
     backend_monitor_status_counts: dict[str, int]
     backend_active_claims: int
+
+class BackendFraudAccuracyResponse(BaseModel):
+    workers_checked: int
+    sim_fraud_workers: int
+    sim_legit_workers: int
+    backend_flagged_workers: int
+    true_positive: int
+    false_positive: int
+    false_negative: int
+    true_negative: int
+    precision: float
+    recall: float

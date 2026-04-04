@@ -337,3 +337,80 @@ class BackendBridge:
                 else 0.0
             ),
         }
+
+    def collect_app_audit(self) -> dict[str, Any]:
+        checks = [
+            ("/dashboard/summary", "dashboard_ok"),
+            ("/workers/profile", "profile_ok"),
+            ("/workers/risk-score", "risk_ok"),
+            ("/workers/smartwork", "smartwork_ok"),
+            ("/policies/active", "policy_active_ok"),
+            ("/policies/history", "policy_history_ok"),
+            ("/payouts/history", "payouts_history_ok"),
+            ("/claims/history", "claim_history_ok"),
+        ]
+
+        counters = {key: 0 for (_, key) in checks}
+        failures = []
+
+        for worker_id, token in self._tokens_by_worker_id.items():
+            for endpoint, key in checks:
+                resp = self._request("GET", endpoint, headers=self._auth_headers(token))
+                if resp.status_code == 200:
+                    counters[key] += 1
+                    continue
+
+                try:
+                    detail = resp.json()
+                except Exception:
+                    detail = resp.text
+
+                failures.append({
+                    "worker_id": worker_id,
+                    "endpoint": endpoint,
+                    "status_code": resp.status_code,
+                    "detail": str(detail),
+                })
+
+        return {
+            "workers_checked": len(self._tokens_by_worker_id),
+            **counters,
+            "failures": failures,
+        }
+
+    def collect_worker_flag_summary(self) -> dict[str, Any]:
+        flagged_workers = set()
+        onboarded_workers = list(self._tokens_by_worker_id.keys())
+        claims_checked = 0
+
+        for worker_id, token in self._tokens_by_worker_id.items():
+            history_resp = self._request("GET", "/claims/history", headers=self._auth_headers(token))
+            history_resp.raise_for_status()
+            claims = history_resp.json()
+
+            for claim in claims:
+                claims_checked += 1
+                claim_id = claim.get("id")
+                if claim.get("fraud_probability") is None and claim_id is not None:
+                    eval_resp = self._request(
+                        "POST",
+                        f"/claims/{claim_id}/evaluate-fraud",
+                        headers=self._auth_headers(token),
+                    )
+                    eval_resp.raise_for_status()
+                    refreshed_resp = self._request(
+                        "GET",
+                        f"/claims/{claim_id}",
+                        headers=self._auth_headers(token),
+                    )
+                    refreshed_resp.raise_for_status()
+                    claim = refreshed_resp.json()
+
+                if bool(claim.get("is_fraud_flagged", False)):
+                    flagged_workers.add(worker_id)
+
+        return {
+            "onboarded_worker_ids": onboarded_workers,
+            "flagged_workers": sorted(flagged_workers),
+            "claims_checked": claims_checked,
+        }
