@@ -1,8 +1,14 @@
 from numpy import random
-from classes.utils import distribute_prob
+try:
+    from .utils import distribute_prob
+except ImportError:
+    from classes.utils import distribute_prob
 from typing import TYPE_CHECKING, List, Dict
 if TYPE_CHECKING:
-    from classes.world import Zone, World
+    try:
+        from .world import Zone, World
+    except ImportError:
+        from classes.world import Zone, World
 
 
 class Worker:

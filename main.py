@@ -1,13 +1,31 @@
-from classes.world import World
-from classes.models import *
+from pathlib import Path
 import logging
 from fastapi import FastAPI, HTTPException
 from typing import List
 import json
+import os
+from dotenv import load_dotenv
+
+try:
+    from .classes.world import World
+    from .classes.models import *
+    from .backend_bridge import BackendBridge
+except ImportError:
+    try:
+        from InsureOnSim.classes.world import World
+        from InsureOnSim.classes.models import *
+        from InsureOnSim.backend_bridge import BackendBridge
+    except ImportError:
+        from classes.world import World
+        from classes.models import *
+        from backend_bridge import BackendBridge
+
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 
-config = json.load(open("config.json", "r"))
+BASE_DIR = Path(__file__).resolve().parent
+config = json.loads((BASE_DIR / "config.json").read_text())
 
 assert config["MIN_ZONE_CONNECTIONS"] < config["N_ZONES"], "Minimum connections must be less than total zones"
 assert config["MAX_ZONE_CONNECTIONS"] < config["N_ZONES"], "Maximum connections must be less than total zones"
@@ -20,6 +38,7 @@ app = FastAPI(
 )
 
 world: World | None = None
+backend_bridge: BackendBridge | None = None
 
 
 
@@ -52,6 +71,32 @@ def _require_world():
             status_code=400,
             detail="World not initialized. Use /init to initialize the world first.",
         )
+
+
+def _get_backend_bridge() -> BackendBridge:
+    global backend_bridge
+    if backend_bridge is not None:
+        return backend_bridge
+
+    backend_url = os.getenv("INSUREON_BACKEND_URL", "").strip()
+    sim_test_key = os.getenv("SIM_TEST_API_KEY", "").strip()
+
+    if not backend_url:
+        raise HTTPException(
+            status_code=400,
+            detail="INSUREON_BACKEND_URL is not configured",
+        )
+    if not sim_test_key:
+        raise HTTPException(
+            status_code=400,
+            detail="SIM_TEST_API_KEY is not configured",
+        )
+
+    backend_bridge = BackendBridge(
+        base_url=backend_url,
+        sim_test_key=sim_test_key,
+    )
+    return backend_bridge
 
 
 
@@ -284,6 +329,16 @@ def get_worker_state(worker_id: int):
     return _worker_state(worker)
 
 
+@app.get("/worker/{worker_id}/platform-metrics", response_model=PlatformMetricsResponse)
+def get_worker_platform_metrics(worker_id: int):
+    _require_world()
+    try:
+        metrics = world.get_worker_platform_metrics(worker_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    return PlatformMetricsResponse(**metrics)
+
+
 @app.get("/world_state", response_model=WorldState)
 def get_world_state():
     _require_world()
@@ -301,3 +356,90 @@ def get_fraud_rings():
         total_rings=len(world.fraud_rings),
         rings=world.fraud_rings,
     )
+
+
+@app.get("/backend/status", response_model=BackendBridgeStatus)
+def backend_status():
+    backend_url = os.getenv("INSUREON_BACKEND_URL", "").strip()
+    sim_test_key = os.getenv("SIM_TEST_API_KEY", "").strip()
+
+    if not backend_url:
+        return BackendBridgeStatus(
+            configured=False,
+            backend_url="",
+            reason="INSUREON_BACKEND_URL missing",
+        )
+
+    if not sim_test_key:
+        return BackendBridgeStatus(
+            configured=False,
+            backend_url=backend_url,
+            reason="SIM_TEST_API_KEY missing",
+        )
+
+    return BackendBridgeStatus(configured=True, backend_url=backend_url)
+
+
+@app.post("/backend/onboard", response_model=BackendSyncResponse)
+def onboard_workers_to_backend(limit: int | None = None):
+    _require_world()
+    bridge = _get_backend_bridge()
+    workers = sorted(world.workers.values(), key=lambda w: w.id)
+    return bridge.onboard_workers(workers, limit=limit)
+
+
+@app.post("/backend/trigger", response_model=BackendTriggerResult)
+def trigger_backend_from_claims():
+    _require_world()
+    bridge = _get_backend_bridge()
+    if world.days_passed == 0:
+        raise HTTPException(status_code=400, detail="No days have been simulated yet. Call /run_day first.")
+
+    claims_today = world.process_claims()
+    return bridge.trigger_from_claims(claims_today, day_number=world.days_passed)
+
+
+@app.post("/backend/sync_weather", response_model=BackendTriggerResult)
+def sync_weather_alerts_to_backend():
+    _require_world()
+    bridge = _get_backend_bridge()
+    if world.days_passed == 0:
+        raise HTTPException(status_code=400, detail="No days have been simulated yet. Call /run_day first.")
+
+    weather_alerts_today = world.get_weather_alerts()
+    return bridge.trigger_from_weather_alerts(weather_alerts_today, day_number=world.days_passed)
+
+
+@app.post("/backend/test_day", response_model=BackendDayTestResponse)
+def run_integrated_backend_test_day():
+    _require_world()
+    bridge = _get_backend_bridge()
+
+    world.run_day()
+    weather_alerts_today = world.get_weather_alerts()
+    claims_today = world.process_claims()
+    trigger_result = bridge.trigger_from_weather_alerts(weather_alerts_today, day_number=world.days_passed)
+    monitoring_result = bridge.process_monitoring_day()
+    backend_active_claims = bridge.count_active_claims_for_onboarded()
+
+    legitimate_claims = [c for c in claims_today if not c["is_fraud"]]
+    fraudulent_claims = [c for c in claims_today if c["is_fraud"]]
+
+    return BackendDayTestResponse(
+        day=world.days_passed,
+        day_name=world.day,
+        total_sim_claims=len(claims_today),
+        legitimate_sim_claims=len(legitimate_claims),
+        fraudulent_sim_claims=len(fraudulent_claims),
+        backend_trigger_count=trigger_result["trigger_count"],
+        backend_claims_opened=trigger_result["claims_opened_total"],
+        backend_monitor_processed=monitoring_result.get("processed", 0),
+        backend_monitor_status_counts=monitoring_result.get("status_counts", {}),
+        backend_active_claims=backend_active_claims,
+    )
+
+
+@app.get("/backend/fraud_audit")
+def backend_fraud_audit():
+    bridge = _get_backend_bridge()
+    return bridge.collect_fraud_audit()

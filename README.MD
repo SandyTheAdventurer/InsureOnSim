@@ -54,3 +54,31 @@ A typical simulation session follows this sequence:
 | uvicorn  | ASGI server to run the FastAPI application    |
 | numpy    | Random number generation and probability math |
 | pydantic | Data validation and response serialisation    |
+| httpx    | Calls InsureOn backend APIs                   |
+
+## Backend Integration (Testing)
+
+InsureOnSim can now onboard simulated workers into the backend and trigger backend claim opening from simulated events.
+
+### 1. Configure env vars
+
+Set these before running InsureOnSim:
+
+```bash
+export INSUREON_BACKEND_URL="http://127.0.0.1:8000"
+export SIM_TEST_API_KEY="replace-with-your-shared-key"
+```
+
+Use the same `SIM_TEST_API_KEY` value in backend env for the new `/claims/sim/trigger` endpoint.
+
+### 2. Flow
+
+1. `POST /init`
+2. `POST /backend/onboard` (creates users, profiles, and active paid policies in backend)
+3. `POST /backend/test_day` (runs one sim day, pushes event triggers, returns backend test metrics)
+
+### 3. Utility endpoints
+
+- `GET /backend/status` — confirms bridge config is complete
+- `POST /backend/trigger` — trigger backend from today’s simulated claims (after `run_day`)
+- `POST /backend/sync_weather` — trigger backend directly from simulation weather alerts (after `run_day`)

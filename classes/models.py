@@ -39,6 +39,14 @@ class WorkerState(BaseModel):
     ring_id: int | None
     actions: list
 
+
+class PlatformMetricsResponse(BaseModel):
+    worker_id: int
+    day: int
+    day_name: str
+    platform_logged_in: bool
+    income_earned: float
+
 class WorldState(BaseModel):
     day: int
     zones: list
@@ -102,3 +110,36 @@ class CompareResponse(BaseModel):
     correct: List[CompareEntry]
     missed: List[CompareEntry] 
     invalid: List[CompareEntry]
+
+
+class BackendBridgeStatus(BaseModel):
+    configured: bool
+    backend_url: str
+    reason: str | None = None
+
+
+class BackendSyncResponse(BaseModel):
+    requested: int
+    onboarded: int
+    failed: int
+    results: List[Any]
+    failures: List[Any]
+
+
+class BackendTriggerResult(BaseModel):
+    trigger_count: int
+    claims_opened_total: int
+    triggers: List[Any]
+
+
+class BackendDayTestResponse(BaseModel):
+    day: int
+    day_name: str
+    total_sim_claims: int
+    legitimate_sim_claims: int
+    fraudulent_sim_claims: int
+    backend_trigger_count: int
+    backend_claims_opened: int
+    backend_monitor_processed: int
+    backend_monitor_status_counts: dict[str, int]
+    backend_active_claims: int

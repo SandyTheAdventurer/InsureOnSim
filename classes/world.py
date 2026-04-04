@@ -1,8 +1,13 @@
 from typing import List, Tuple
-from classes.utils import distribute_prob
-from classes.worker import Worker
+try:
+    from .utils import distribute_prob
+    from .worker import Worker
+    from .models import DaySummary
+except ImportError:
+    from classes.utils import distribute_prob
+    from classes.worker import Worker
+    from classes.models import DaySummary
 import numpy.random as random
-from classes.models import DaySummary
 
 class Zone:
     def __init__(self, id: int, type: str, n_connections: int, hostpot_type: int, event_prob: float, event_info: str) -> None:
@@ -290,6 +295,44 @@ class World:
                     "day_name": latest["day_name"],
                 })
         return claims
+
+    def get_worker_platform_metrics(self, worker_id: int) -> dict:
+        worker = self.workers.get(worker_id)
+        if worker is None:
+            raise KeyError(f"Worker {worker_id} not found")
+
+        # If a major disruption is active in the worker's zone, assume zero work today.
+        if worker.zone.civil_state == "lockdown" or worker.zone.weather == "disaster":
+            return {
+                "worker_id": worker.id,
+                "day": self.days_passed,
+                "day_name": self.day,
+                "platform_logged_in": False,
+                "income_earned": 0.0,
+            }
+
+        action_weight = {
+            "long commute single delivery": 0.18,
+            "long commute multiple deliveries": 0.30,
+            "short commute multiple deliveries": 0.34,
+            "short commute single delivery": 0.22,
+            "leisure": 0.0,
+        }
+        action_score = sum(action_weight.get(action, 0.0) for action in worker.actions)
+        max_score = max(len(worker.actions) * 0.34, 1.0)
+        normalized = min(action_score / max_score, 1.0)
+
+        base_daily_income = float(worker.income) / 6.0
+        platform_logged_in = any(action != "leisure" for action in worker.actions)
+        income_earned = round(base_daily_income * normalized, 2) if platform_logged_in else 0.0
+
+        return {
+            "worker_id": worker.id,
+            "day": self.days_passed,
+            "day_name": self.day,
+            "platform_logged_in": platform_logged_in,
+            "income_earned": income_earned,
+        }
 
     def simulate(self, n_days: int, logger=None):
         for day in range(n_days):
